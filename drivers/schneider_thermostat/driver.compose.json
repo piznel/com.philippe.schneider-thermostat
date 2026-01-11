@@ -1,0 +1,55 @@
+{
+  "id": "schneider_thermostat",
+  "name": {
+    "en": "Schneider Thermostat (CCTFR6400)",
+    "fr": "Thermostat Schneider (CCTFR6400)"
+  },
+  "class": "thermostat",
+  "capabilities": [
+    "measure_temperature",
+    "measure_humidity",
+    "measure_battery",
+    "target_temperature"
+  ],
+  "energy": {
+    "batteries": ["AAA", "AAA"]
+  },
+  "zigbee": {
+    "manufacturerName": "Schneider Electric",
+    "productId": "Thermostat"
+  },
+  "pair": [
+    {
+      "id": "instructions",
+      "template": "loading",
+      "options": {
+        "title": {
+          "en": "Pairing Instructions",
+          "fr": "Instructions d'appairage"
+        },
+        "text": {
+          "en": "1. Remove the batteries from the thermostat\n2. Reinsert the batteries\n3. When the 'Wiser' startup screen appears, press and hold the + and - buttons simultaneously for 20 seconds\n4. The thermostat will restart and enter pairing mode",
+          "fr": "1. Retirez les piles du thermostat\n2. Réinsérez les piles\n3. Quand l'écran 'Wiser' apparaît, appuyez simultanément sur les boutons + et - pendant 20 secondes\n4. Le thermostat redémarre et entre en mode appairage"
+        }
+      },
+      "navigation": {
+        "next": "list_devices"
+      }
+    },
+    {
+      "id": "list_devices",
+      "template": "list_devices",
+      "navigation": {
+        "next": "add_devices"
+      }
+    },
+    {
+      "id": "add_devices",
+      "template": "add_devices"
+    }
+  ],
+  "images": {
+    "small": "/drivers/schneider_thermostat/assets/images/small.png",
+    "large": "/drivers/schneider_thermostat/assets/images/large.png"
+  }
+}

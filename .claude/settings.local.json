@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Bash(del \"D:\\\\homey\\\\com.philippe.schneider-thermostat\\\\drivers\\\\schneider_thermostat\\\\SchneiderThermostatCluster.js\")",
+      "Bash(cmd /c del \"D:\\\\homey\\\\com.philippe.schneider-thermostat\\\\drivers\\\\schneider_thermostat\\\\SchneiderThermostatCluster.js\")",
+      "Bash(npx homey app:*)",
+      "Bash(dir:*)",
+      "Bash(if not exist \"D:\\\\homey\\\\com.philippe.schneider-thermostat\\\\assets\\\\icons\" mkdir \"D:\\\\homey\\\\com.philippe.schneider-thermostat\\\\assets\\\\icons\")",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}

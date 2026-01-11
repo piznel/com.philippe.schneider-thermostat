@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50" width="50" height="50">
+  <!-- Schneider Electric green thermostat icon -->
+  <circle cx="25" cy="25" r="23" fill="#3DCD58" stroke="#2ba84a" stroke-width="2"/>
+  <circle cx="25" cy="25" r="16" fill="white"/>
+  <!-- Temperature indicator -->
+  <rect x="23" y="12" width="4" height="18" rx="2" fill="#3DCD58"/>
+  <circle cx="25" cy="32" r="5" fill="#3DCD58"/>
+  <!-- Temperature marks -->
+  <line x1="25" y1="8" x2="25" y2="10" stroke="#2ba84a" stroke-width="2" stroke-linecap="round"/>
+  <line x1="37" y1="25" x2="39" y2="25" stroke="#2ba84a" stroke-width="2" stroke-linecap="round"/>
+  <line x1="11" y1="25" x2="13" y2="25" stroke="#2ba84a" stroke-width="2" stroke-linecap="round"/>
+</svg>

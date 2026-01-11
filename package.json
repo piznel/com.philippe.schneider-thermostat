@@ -1,0 +1,9 @@
+{
+  "name": "com.philippe.schneider-thermostat",
+  "version": "0.0.1",
+  "main": "app.js",
+  "private": true,
+  "dependencies": {
+    "homey-zigbeedriver": "^2.1.0"
+  }
+}
