@@ -8,7 +8,11 @@
       "Bash(dir:*)",
       "Bash(if not exist \"D:\\\\homey\\\\com.philippe.schneider-thermostat\\\\assets\\\\icons\" mkdir \"D:\\\\homey\\\\com.philippe.schneider-thermostat\\\\assets\\\\icons\")",
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial commit: Schneider CCTFR6400 Thermostat Homey App\n\nFeatures:\n- Bidirectional communication with thermostat via Zigbee binding\n- Temperature, humidity, and battery monitoring\n- Heating demand control \\(flame icon, 0-100%\\)\n- Button press detection and setpoint sync\n- Screen wake/sleep tracking\n- Anti-drift polling every 10 minutes\n- French and English localization\n\nKnown limitation: Boost mode cannot be synced \\(thermostat doesn''t report boost temperature\\)\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(gh --version:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)"
     ]
   }
 }

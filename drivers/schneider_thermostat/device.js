@@ -8,6 +8,9 @@ require('./SchneiderThermostatCluster');
 require('./WiserDeviceInfoCluster');
 const SchneiderThermostatBoundCluster = require('./SchneiderThermostatBoundCluster');
 
+// Set to true to enable verbose debug logging
+const DEBUG_MODE = false;
+
 // Conversions
 const centiToC = (v) => (Number.isFinite(v) ? v / 100 : null);
 const centiPctToPct = (v) => (Number.isFinite(v) ? v / 100 : null);
@@ -21,11 +24,21 @@ const toNumber = (v) => {
 };
 
 class SchneiderThermostatDevice extends ZigBeeDevice {
+  // Debug logging helper - only logs when DEBUG_MODE is true
+  debug(...args) {
+    if (DEBUG_MODE) {
+      this.log('[DEBUG]', ...args);
+    }
+  }
+
   async onNodeInit({ zclNode }) {
     this.log('Init', this.getData());
 
     const ep = zclNode.endpoints?.[1];
-    if (!ep) throw new Error('Endpoint 1 not found');
+    if (!ep) {
+      this.error('Endpoint 1 not found! Device might not be initialized correctly.');
+      return;
+    }
 
     this._zclNode = zclNode;
     this._endpoint = ep;
@@ -150,10 +163,10 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
     }
 
     // ---- Debug: Listen for ALL thermostat cluster events ----
-    if (ep.clusters?.thermostat) {
-      this.log('Setting up thermostat debug listeners');
+    if (ep.clusters?.thermostat && DEBUG_MODE) {
+      this.debug('Setting up thermostat debug listeners');
       ep.clusters.thermostat.on('attr.*', (name, value) => {
-        this.log('>>> THERMOSTAT ATTR:', name, '=', value);
+        this.debug('THERMOSTAT ATTR:', name, '=', value);
       });
     }
 
@@ -173,35 +186,39 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
 
       // Also listen for report events
       wiserCluster.on('report', async (report) => {
-        this.log('>>> WISER REPORT:', JSON.stringify(report));
+        this.debug('WISER REPORT:', JSON.stringify(report));
         if (report?.deviceInfo) {
           await this._handleDeviceInfo(report.deviceInfo);
         }
       });
 
-      // Generic attribute listener
-      wiserCluster.on('attr.*', (name, value) => {
-        this.log('>>> WISER ATTR:', name, '=', value);
-      });
+      // Generic attribute listener (debug only)
+      if (DEBUG_MODE) {
+        wiserCluster.on('attr.*', (name, value) => {
+          this.debug('WISER ATTR:', name, '=', value);
+        });
+      }
     } else {
       this.log('wiserDeviceInfo cluster not found, checking available clusters');
     }
 
-    // ---- Listen to ALL clusters for debugging ----
-    this.log('Setting up global debug listeners on all clusters');
-    for (const [clusterName, cluster] of Object.entries(ep.clusters || {})) {
-      if (cluster && typeof cluster.on === 'function') {
-        cluster.on('attr.*', (name, value) => {
-          this.log(`>>> [${clusterName}] attr.${name} =`, value);
+    // ---- Listen to ALL clusters for debugging (only when DEBUG_MODE is true) ----
+    if (DEBUG_MODE) {
+      this.debug('Setting up global debug listeners on all clusters');
+      for (const [clusterName, cluster] of Object.entries(ep.clusters || {})) {
+        if (cluster && typeof cluster.on === 'function') {
+          cluster.on('attr.*', (name, value) => {
+            this.debug(`[${clusterName}] attr.${name} =`, value);
+          });
+        }
+      }
+
+      // Listen for raw frames on the node
+      if (zclNode.on) {
+        zclNode.on('frame', (frame) => {
+          this.debug('RAW FRAME:', JSON.stringify(frame));
         });
       }
-    }
-
-    // Listen for raw frames on the node
-    if (zclNode.on) {
-      zclNode.on('frame', (frame) => {
-        this.log('>>> RAW FRAME:', JSON.stringify(frame));
-      });
     }
 
     // ---- Periodic polling for anti-drift (every 10 minutes) ----
@@ -352,13 +369,25 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
   }
 
   /**
-   * Update setpoint from button press
+   * Update setpoint from button press or ENV message
+   * Uses _isUpdatingSetpoint flag to prevent feedback loops
    */
   async _updateSetpoint(centiValue) {
-    this._targetSetpointCenti = centiValue;
-    await this.setStoreValue('targetSetpointCenti', centiValue);
-    await this.setCapabilityValue('target_temperature', centiValue / 100);
-    this.log(`Setpoint updated to ${centiValue / 100}°C`);
+    // Prevent feedback loop (in case setCapabilityValue triggers listener)
+    if (this._isUpdatingSetpoint) {
+      this.debug('Skipping setpoint update - already in progress');
+      return;
+    }
+
+    this._isUpdatingSetpoint = true;
+    try {
+      this._targetSetpointCenti = centiValue;
+      await this.setStoreValue('targetSetpointCenti', centiValue);
+      await this.setCapabilityValue('target_temperature', centiValue / 100);
+      this.log(`Setpoint updated to ${centiValue / 100}°C`);
+    } finally {
+      this._isUpdatingSetpoint = false;
+    }
   }
 }
 
