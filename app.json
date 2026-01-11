@@ -85,6 +85,13 @@
       "images": {
         "small": "/drivers/schneider_thermostat/assets/images/small.png",
         "large": "/drivers/schneider_thermostat/assets/images/large.png"
+      },
+      "capabilitiesOptions": {
+        "heating_demand": {
+          "min": 0,
+          "max": 100,
+          "step": 1
+        }
       }
     }
   ]

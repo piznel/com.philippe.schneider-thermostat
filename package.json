@@ -5,5 +5,8 @@
   "private": true,
   "dependencies": {
     "homey-zigbeedriver": "^2.1.0"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.5"
   }
 }
