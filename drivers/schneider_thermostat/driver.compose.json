@@ -10,14 +10,20 @@
     "measure_humidity",
     "measure_battery",
     "target_temperature",
-    "heating_demand"
+    "thermostat_mode"
   ],
   "energy": {
     "batteries": ["AAA", "AAA"]
   },
   "zigbee": {
     "manufacturerName": "Schneider Electric",
-    "productId": "Thermostat"
+    "productId": "Thermostat",
+    "endpoints": {
+      "1": {
+        "clusters": [0, 1, 3, 32, 513, 516, 1026, 1029, 2821, 65027],
+        "bindings": [0, 25, 513, 65027]
+      }
+    }
   },
   "pair": [
     {
@@ -29,8 +35,8 @@
           "fr": "Instructions d'appairage"
         },
         "text": {
-          "en": "1. Remove the batteries from the thermostat\n2. Reinsert the batteries\n3. When the 'Wiser' startup screen appears, press and hold the + and - buttons simultaneously for 20 seconds\n4. The thermostat will restart and enter pairing mode",
-          "fr": "1. Retirez les piles du thermostat\n2. Réinsérez les piles\n3. Quand l'écran 'Wiser' apparaît, appuyez simultanément sur les boutons + et - pendant 20 secondes\n4. Le thermostat redémarre et entre en mode appairage"
+          "en": "To pair your Schneider CCTFR6400 thermostat:\n\n1. Remove the batteries from the thermostat\n2. Reinsert the batteries\n3. When the 'Wiser' startup screen appears, press and hold the + and - buttons simultaneously for 20 seconds\n4. The thermostat will restart and enter pairing mode\n5. Click 'Next' when ready to search for the device",
+          "fr": "Pour appairer votre thermostat Schneider CCTFR6400 :\n\n1. Retirez les piles du thermostat\n2. Réinsérez les piles\n3. Quand l'écran 'Wiser' apparaît, appuyez simultanément sur les boutons + et - pendant 20 secondes\n4. Le thermostat redémarre et entre en mode appairage\n5. Cliquez sur 'Suivant' quand vous êtes prêt à rechercher l'appareil"
         }
       },
       "navigation": {
@@ -49,8 +55,29 @@
       "template": "add_devices"
     }
   ],
+  "icon": "/drivers/schneider_thermostat/assets/icon.svg",
   "images": {
     "small": "/drivers/schneider_thermostat/assets/images/small.png",
     "large": "/drivers/schneider_thermostat/assets/images/large.png"
+  },
+  "capabilitiesOptions": {
+    "thermostat_mode": {
+      "values": [
+        {
+          "id": "off",
+          "title": {
+            "en": "Off",
+            "fr": "Arrêt"
+          }
+        },
+        {
+          "id": "heat",
+          "title": {
+            "en": "Heat",
+            "fr": "Chauffage"
+          }
+        }
+      ]
+    }
   }
 }

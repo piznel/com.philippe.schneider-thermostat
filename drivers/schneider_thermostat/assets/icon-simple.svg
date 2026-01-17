@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Simplified thermostat icon for Homey -->
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="#f5f5f0" stroke="#3DCD58" stroke-width="2"/>
+  <rect x="12" y="12" width="40" height="28" rx="4" fill="#1a1a1a"/>
+  <text x="32" y="30" font-family="Arial" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">20°</text>
+  <circle cx="20" cy="50" r="5" fill="#3DCD58"/>
+  <circle cx="32" cy="50" r="5" fill="#3DCD58"/>
+  <circle cx="44" cy="50" r="5" fill="#3DCD58"/>
+</svg>

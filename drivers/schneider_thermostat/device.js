@@ -7,14 +7,27 @@ const { CLUSTER } = require('zigbee-clusters');
 require('./SchneiderThermostatCluster');
 require('./WiserDeviceInfoCluster');
 const SchneiderThermostatBoundCluster = require('./SchneiderThermostatBoundCluster');
+const BasicBoundCluster = require('./BasicBoundCluster');
 
 // Set to true to enable verbose debug logging
-const DEBUG_MODE = false;
+// Can be overridden via env.json or environment variable
+// Note: Homey.env is only available in device/app context, not at module level
+// So we check process.env which is set from env.json by Homey
+const DEBUG_MODE = process.env.HOMEY_DEBUG === 'true' || false;
+
+// Constants
+const TEMP_MIN_CENTI = 400;  // 4°C minimum setpoint
+const TEMP_MAX_CENTI = 3000; // 30°C maximum setpoint
+const TEMP_DEFAULT_CENTI = 2000; // 20°C default setpoint
+const TEMP_STEP_CENTI = 50;  // 0.5°C step for button presses
+const POLL_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+const READ_ATTRIBUTES_TIMEOUT_MS = 5000; // 5 seconds timeout for attribute reads
 
 // Conversions
 const centiToC = (v) => (Number.isFinite(v) ? v / 100 : null);
 const centiPctToPct = (v) => (Number.isFinite(v) ? v / 100 : null);
-const halfPctToPct = (v) => (Number.isFinite(v) ? v / 2 : null);
+// Schneider reports battery as 0-100%, not 0-200 (half percent) like ZCL spec
+const batteryPct = (v) => (Number.isFinite(v) ? Math.min(100, v) : null);
 
 // Safe number parsing/clamp
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
@@ -53,13 +66,28 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
       this._targetSetpointCenti = Math.round(capabilityValue * 100);
       this.log('Restored setpoint from capability:', capabilityValue, '°C');
     } else {
-      this._targetSetpointCenti = 2000; // Default 20°C
+      this._targetSetpointCenti = TEMP_DEFAULT_CENTI;
       this.log('Using default setpoint: 20°C');
     }
 
+    // Initialize flag to prevent feedback loops
+    this._isUpdatingSetpoint = false;
+
     // Initialize capabilities with default values
-    await this.setCapabilityValue('target_temperature', this._targetSetpointCenti / 100).catch(this.error);
-    await this.setCapabilityValue('heating_demand', 0).catch(this.error);
+    try {
+      await this.setCapabilityValue('target_temperature', this._targetSetpointCenti / 100);
+    } catch (err) {
+      this.error('Failed to initialize target_temperature capability:', err);
+    }
+
+    // Initialize thermostat_mode instead of heating_demand
+    if (this.hasCapability('thermostat_mode')) {
+      try {
+        await this.setCapabilityValue('thermostat_mode', 'off');
+      } catch (err) {
+        this.error('Failed to initialize thermostat_mode capability:', err);
+      }
+    }
 
     this.log('Available clusters:', Object.keys(ep.clusters || {}));
 
@@ -78,29 +106,71 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
           const tempC = centiValue / 100;
           this.log('>>> SETPOINT FROM THERMOSTAT:', centiValue, '=', tempC, '°C');
           this._targetSetpointCenti = centiValue;
-          await this.setStoreValue('targetSetpointCenti', centiValue);
-          await this.setCapabilityValue('target_temperature', tempC);
+          try {
+            await this.setStoreValue('targetSetpointCenti', centiValue);
+            await this.setCapabilityValue('target_temperature', tempC);
+          } catch (err) {
+            this.error('Failed to update setpoint from thermostat:', err);
+          }
         },
-        getMinSetpoint: () => 400,  // 4°C
-        getMaxSetpoint: () => 3000, // 30°C
+        getMinSetpoint: () => TEMP_MIN_CENTI,
+        getMaxSetpoint: () => TEMP_MAX_CENTI,
         getPiHeatingDemand: () => this._piHeatingDemand,
         getLocalTemperature: () => this._localTemperatureCenti,
+        logger: (level, ...args) => {
+          if (level === 'error') {
+            this.error(...args);
+          } else {
+            this.log(...args);
+          }
+        },
       });
       ep.bind('thermostat', boundCluster);
-      this.log('Bound thermostat cluster as server');
+      this.log('✅ Bound thermostat cluster as server');
     } catch (err) {
-      this.log('Failed to bind thermostat cluster:', err.message);
+      this.error('Failed to bind thermostat cluster:', err);
+      // Continue initialization even if binding fails - device might still work
     }
 
-    // ---- Heating Demand (flame icon) ----
-    // 0-100%: controls flame icon on thermostat display
-    if (this.hasCapability('heating_demand')) {
-      this.registerCapabilityListener('heating_demand', async (value) => {
-        const demand = Math.round(Math.max(0, Math.min(100, value)));
-        this.log(`Setting heating demand to ${demand}%`);
-        this._piHeatingDemand = demand;
+    // ---- Bind Basic cluster (0x0000) ----
+    // The thermostat might read Basic cluster attributes to verify hub connectivity
+    try {
+      const basicBoundCluster = new BasicBoundCluster({
+        logger: (level, ...args) => {
+          if (level === 'error') {
+            this.error(...args);
+          } else {
+            this.log(...args);
+          }
+        },
+      });
+      ep.bind('basic', basicBoundCluster);
+      this.log('✅ Bound Basic cluster as server');
+      this.log('   The thermostat can now verify hub connectivity via Basic cluster');
+    } catch (err) {
+      this.error('Failed to bind Basic cluster:', err);
+      // Continue initialization even if binding fails
+    }
+
+    // ---- Thermostat Mode ----
+    // Controls the mode (heat/off) and maps to piHeatingDemand for flame icon
+    if (this.hasCapability('thermostat_mode')) {
+      this.registerCapabilityListener('thermostat_mode', async (value) => {
+        this.log(`Setting thermostat mode to ${value}`);
+        // Map mode to heating demand: "heat" = 100%, "off" = 0%
+        if (value === 'heat') {
+          this._piHeatingDemand = 100;
+        } else if (value === 'off') {
+          this._piHeatingDemand = 0;
+        }
         return true;
       });
+      // Initialize mode to "off" by default
+      try {
+        await this.setCapabilityValue('thermostat_mode', 'off');
+      } catch (err) {
+        this.error('Failed to initialize thermostat_mode capability:', err);
+      }
     }
 
     // ---- Temperature ----
@@ -140,22 +210,26 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
       this.registerCapability('measure_battery', CLUSTER.POWER_CONFIGURATION, {
         get: 'batteryPercentageRemaining',
         report: 'batteryPercentageRemaining',
-        reportParser: halfPctToPct,
-        getParser: halfPctToPct,
+        reportParser: batteryPct,
+        getParser: batteryPct,
       });
     }
 
     // ---- Target Temperature ----
     if (this.hasCapability('target_temperature')) {
       this.registerCapabilityListener('target_temperature', async (value) => {
-        const c = clamp(toNumber(value) || 20, 4, 30);
+        const c = clamp(toNumber(value) || 20, TEMP_MIN_CENTI / 100, TEMP_MAX_CENTI / 100);
         const centi = Math.round(c * 100);
 
         this.log(`Setting target_temperature to ${c}°C`);
         this._targetSetpointCenti = centi;
 
         // Persist to store
-        await this.setStoreValue('targetSetpointCenti', centi);
+        try {
+          await this.setStoreValue('targetSetpointCenti', centi);
+        } catch (err) {
+          this.error('Failed to persist setpoint to store:', err);
+        }
 
         // The thermostat will read this value on its next poll
         return true;
@@ -180,15 +254,23 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
       this.log('Setting up wiserDeviceInfo listener');
 
       wiserCluster.on('attr.deviceInfo', async (value) => {
-        this.log('>>> WISER DEVICE INFO:', value);
-        await this._handleDeviceInfo(value);
+        try {
+          this.log('>>> WISER DEVICE INFO:', value);
+          await this._handleDeviceInfo(value);
+        } catch (err) {
+          this.error('Error handling deviceInfo attribute:', err);
+        }
       });
 
       // Also listen for report events
       wiserCluster.on('report', async (report) => {
-        this.debug('WISER REPORT:', JSON.stringify(report));
-        if (report?.deviceInfo) {
-          await this._handleDeviceInfo(report.deviceInfo);
+        try {
+          this.debug('WISER REPORT:', JSON.stringify(report));
+          if (report?.deviceInfo) {
+            await this._handleDeviceInfo(report.deviceInfo);
+          }
+        } catch (err) {
+          this.error('Error handling deviceInfo report:', err);
         }
       });
 
@@ -233,8 +315,6 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
    * Reads ENV data periodically to ensure Homey and thermostat are in sync
    */
   _startAntiDriftPolling() {
-    const POLL_INTERVAL = 10 * 60 * 1000; // 10 minutes
-
     // Clear any existing interval
     if (this._antiDriftInterval) {
       clearInterval(this._antiDriftInterval);
@@ -246,21 +326,40 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
         // This also updates _localTemperatureCenti for the BoundCluster
         const tempCluster = this._endpoint?.clusters?.temperatureMeasurement;
         if (tempCluster) {
-          const result = await tempCluster.readAttributes(['measuredValue']).catch(() => null);
-          if (result?.measuredValue !== undefined) {
-            this.log(`Anti-drift poll: temperature = ${result.measuredValue / 100}°C`);
-            this._localTemperatureCenti = result.measuredValue;
+          // Add timeout to prevent indefinite blocking
+          const readPromise = tempCluster.readAttributes(['measuredValue']);
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Read attributes timeout')), READ_ATTRIBUTES_TIMEOUT_MS);
+          });
+
+          try {
+            const result = await Promise.race([readPromise, timeoutPromise]);
+            if (result?.measuredValue !== undefined) {
+              this.log(`Anti-drift poll: temperature = ${result.measuredValue / 100}°C`);
+              this._localTemperatureCenti = result.measuredValue;
+            }
+          } catch (err) {
+            this.debug('Anti-drift poll: failed to read temperature (device may be offline):', err.message);
           }
         }
 
         // Log current state for debugging
         this.log(`Anti-drift check: Homey setpoint = ${this._targetSetpointCenti / 100}°C, heating demand = ${this._piHeatingDemand}%`);
       } catch (err) {
-        this.log('Anti-drift poll error:', err.message);
+        this.error('Anti-drift poll error:', err);
       }
-    }, POLL_INTERVAL);
+    }, POLL_INTERVAL_MS);
 
-    this.log(`Anti-drift polling started (every ${POLL_INTERVAL / 60000} minutes)`);
+    this.log(`Anti-drift polling started (every ${POLL_INTERVAL_MS / 60000} minutes)`);
+  }
+
+  async onUninit() {
+    // Clean up polling interval when device is uninitialized (disconnected)
+    if (this._antiDriftInterval) {
+      clearInterval(this._antiDriftInterval);
+      this._antiDriftInterval = null;
+      this.log('Anti-drift polling stopped (device uninitialized)');
+    }
   }
 
   async onDeleted() {
@@ -296,19 +395,39 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
 
     // Handle ENV data: ENV,setpoint,temperature,humidity (all in centi-units)
     if (dataType === 'ENV') {
+      // Validate that we have enough parts
+      if (parts.length < 4) {
+        this.log('Invalid ENV data: insufficient parts', deviceInfo);
+        return;
+      }
+
+      // Parse and validate each value strictly
       const setpointCenti = parseInt(parts[1], 10);
       const tempCenti = parseInt(parts[2], 10);
       const humidityCenti = parseInt(parts[3], 10);
 
+      // Validate that all values are valid integers within expected ranges
+      const isValidSetpoint = Number.isInteger(setpointCenti) && 
+                              setpointCenti >= TEMP_MIN_CENTI && 
+                              setpointCenti <= TEMP_MAX_CENTI &&
+                              setpointCenti !== -32768; // -32768 means "not available" in ZCL
+
+      const isValidTemp = Number.isInteger(tempCenti) && tempCenti !== -32768;
+      const isValidHumidity = Number.isInteger(humidityCenti) && 
+                              humidityCenti >= 0 && 
+                              humidityCenti <= 10000; // 0-100% in centi-percent
+
+      if (!isValidSetpoint || !isValidTemp || !isValidHumidity) {
+        this.log(`ENV data validation failed: setpoint=${setpointCenti}, temp=${tempCenti}, humidity=${humidityCenti}`);
+        return;
+      }
+
       this.log(`ENV data: setpoint=${setpointCenti/100}°C, temp=${tempCenti/100}°C, humidity=${humidityCenti/100}%`);
 
-      // Sync setpoint if valid (between 4°C and 30°C)
-      const validSetpoint = Number.isFinite(setpointCenti) && setpointCenti >= 400 && setpointCenti <= 3000;
-      if (validSetpoint && setpointCenti !== this._targetSetpointCenti) {
+      // Sync setpoint if it differs from current value
+      if (setpointCenti !== this._targetSetpointCenti) {
         this.log(`Syncing setpoint from ENV: ${this._targetSetpointCenti/100}°C -> ${setpointCenti/100}°C`);
         await this._updateSetpoint(setpointCenti);
-      } else if (!validSetpoint) {
-        this.log('ENV setpoint invalid or out of range, ignoring');
       }
       return;
     }
@@ -332,15 +451,13 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
 
     // Handle button presses - adjust setpoint by 0.5°C (50 centi-degrees)
     // Note: If screen was asleep, first button press only wakes screen (no temp change)
-    const STEP = 50; // 0.5°C in centi-degrees
-
     if (action === 'ButtonPressPlusDown') {
       if (!this._screenAwake) {
         this.log('Plus button pressed (ignored - screen was asleep, this just wakes it)');
         this._screenAwake = true;
         return;
       }
-      const newSetpoint = Math.min(this._targetSetpointCenti + STEP, 3000);
+      const newSetpoint = Math.min(this._targetSetpointCenti + TEMP_STEP_CENTI, TEMP_MAX_CENTI);
       this.log(`Plus button pressed: ${this._targetSetpointCenti / 100}°C -> ${newSetpoint / 100}°C`);
       await this._updateSetpoint(newSetpoint);
       return;
@@ -352,7 +469,7 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
         this._screenAwake = true;
         return;
       }
-      const newSetpoint = Math.max(this._targetSetpointCenti - STEP, 400);
+      const newSetpoint = Math.max(this._targetSetpointCenti - TEMP_STEP_CENTI, TEMP_MIN_CENTI);
       this.log(`Minus button pressed: ${this._targetSetpointCenti / 100}°C -> ${newSetpoint / 100}°C`);
       await this._updateSetpoint(newSetpoint);
       return;
@@ -379,12 +496,27 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
       return;
     }
 
+    // Validate setpoint range
+    if (!Number.isInteger(centiValue) || centiValue < TEMP_MIN_CENTI || centiValue > TEMP_MAX_CENTI) {
+      this.error(`Invalid setpoint value: ${centiValue} (must be between ${TEMP_MIN_CENTI} and ${TEMP_MAX_CENTI})`);
+      return;
+    }
+
     this._isUpdatingSetpoint = true;
     try {
       this._targetSetpointCenti = centiValue;
-      await this.setStoreValue('targetSetpointCenti', centiValue);
-      await this.setCapabilityValue('target_temperature', centiValue / 100);
-      this.log(`Setpoint updated to ${centiValue / 100}°C`);
+      try {
+        await this.setStoreValue('targetSetpointCenti', centiValue);
+      } catch (err) {
+        this.error('Failed to persist setpoint to store:', err);
+      }
+
+      try {
+        await this.setCapabilityValue('target_temperature', centiValue / 100);
+        this.log(`Setpoint updated to ${centiValue / 100}°C`);
+      } catch (err) {
+        this.error('Failed to update target_temperature capability:', err);
+      }
     } finally {
       this._isUpdatingSetpoint = false;
     }

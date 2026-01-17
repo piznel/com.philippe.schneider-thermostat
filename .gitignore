@@ -25,3 +25,7 @@ npm-debug.log*
 # Environment
 .env
 .env.local
+env.json# Test coverage
+coverage/
+*.lcov
+.nyc_output/

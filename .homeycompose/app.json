@@ -1,0 +1,26 @@
+{
+  "id": "com.philippe.schneider-thermostat",
+  "version": "0.0.2",
+  "sdk": 3,
+  "compatibility": ">=12.0.0",
+  "author": {
+    "name": "Philippe",
+    "email": "philippe@gmail.com"
+  },
+  "name": {
+    "en": "Schneider Thermostat (CCTFR6400)",
+    "fr": "Thermostat Schneider (CCTFR6400)"
+  },
+  "description": {
+    "en": "Zigbee driver for Schneider Electric thermostat.",
+    "fr": "Driver Zigbee pour thermostat Schneider Electric."
+  },
+  "category": ["climate"],
+  "brandColor": "#3DCD58",
+  "permissions": [],
+  "images": {
+    "small": "/assets/images/small.png",
+    "large": "/assets/images/large.png",
+    "xlarge": "/assets/images/xlarge.png"
+  }
+}

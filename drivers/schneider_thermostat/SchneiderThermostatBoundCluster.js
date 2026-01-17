@@ -10,7 +10,7 @@ const { BoundCluster } = require('zigbee-clusters');
  * - Sends setpoint changes via Command 0xE0 when user changes on device
  */
 class SchneiderThermostatBoundCluster extends BoundCluster {
-  constructor({ getSetpoint, setSetpoint, getMinSetpoint, getMaxSetpoint, getPiHeatingDemand, getLocalTemperature }) {
+  constructor({ getSetpoint, setSetpoint, getMinSetpoint, getMaxSetpoint, getPiHeatingDemand, getLocalTemperature, logger }) {
     super();
     this._getSetpoint = getSetpoint;
     this._setSetpoint = setSetpoint;
@@ -18,11 +18,23 @@ class SchneiderThermostatBoundCluster extends BoundCluster {
     this._getMaxSetpoint = getMaxSetpoint || (() => 3000);
     this._getPiHeatingDemand = getPiHeatingDemand || (() => 0);
     this._getLocalTemperature = getLocalTemperature || (() => null);
+    // Logger function from device (this.log or this.error)
+    this._logger = logger || ((level, ...args) => {
+      // Fallback to console if no logger provided
+      if (level === 'error') {
+        console.error('[BoundCluster]', ...args);
+      } else {
+        console.log('[BoundCluster]', ...args);
+      }
+    });
   }
 
   // Attribute getters - read by the thermostat
+  // These are called when the thermostat reads attributes via binding
   get occupiedHeatingSetpoint() {
-    return this._getSetpoint();
+    const value = this._getSetpoint();
+    this._logger('log', '[BoundCluster] Reading occupiedHeatingSetpoint:', value);
+    return value;
   }
 
   get minHeatSetpointLimit() {
@@ -36,7 +48,9 @@ class SchneiderThermostatBoundCluster extends BoundCluster {
   // PI Heating Demand (0-100%) - controls the flame icon on the thermostat
   // 0 = flame off, 100 = flame on (full heat demand)
   get pIHeatingDemand() {
-    return this._getPiHeatingDemand();
+    const value = this._getPiHeatingDemand();
+    this._logger('log', '[BoundCluster] Reading pIHeatingDemand:', value);
+    return value;
   }
 
   get localTemperature() {
@@ -50,11 +64,55 @@ class SchneiderThermostatBoundCluster extends BoundCluster {
   }
 
   get systemMode() {
-    return 4; // Heat
+    const value = 4; // Heat
+    this._logger('log', '[BoundCluster] Reading systemMode:', value);
+    return value;
   }
 
   get controlSequenceOfOperation() {
     return 2; // Heating only
+  }
+
+  // Additional attributes that the thermostat might read to verify hub connectivity
+  get occupiedCoolingSetpoint() {
+    // Not used for heating-only thermostat, but return a valid value
+    return 2500; // 25°C default cooling setpoint
+  }
+
+  get minCoolSetpointLimit() {
+    return 1600; // 16°C minimum cooling
+  }
+
+  get maxCoolSetpointLimit() {
+    return 3500; // 35°C maximum cooling
+  }
+
+  get absMinHeatSetpointLimit() {
+    return 700; // 7°C absolute minimum (ZCL spec)
+  }
+
+  get absMaxHeatSetpointLimit() {
+    return 3000; // 30°C absolute maximum
+  }
+
+  get absMinCoolSetpointLimit() {
+    return 1600; // 16°C absolute minimum cooling
+  }
+
+  get absMaxCoolSetpointLimit() {
+    return 3500; // 35°C absolute maximum cooling
+  }
+
+  get remoteSensing() {
+    return 0; // No remote sensing
+  }
+
+  get outdoorTemperature() {
+    return -32768; // Not available (0x8000)
+  }
+
+  get occupancy() {
+    return 1; // Occupied
   }
 
   /**
@@ -62,18 +120,20 @@ class SchneiderThermostatBoundCluster extends BoundCluster {
    * Format: zone (uint8) + temperature (uint16 LE centi-degrees) + end marker (0xFF)
    */
   schneiderSetpoint(args) {
-    console.log('[BoundCluster] Received schneiderSetpoint command:', JSON.stringify(args));
+    this._logger('log', '[BoundCluster] Received schneiderSetpoint command:', JSON.stringify(args));
     if (args && typeof args.temperature === 'number') {
-      console.log('[BoundCluster] Setpoint from thermostat:', args.temperature / 100, '°C');
+      this._logger('log', '[BoundCluster] Setpoint from thermostat:', args.temperature / 100, '°C');
       if (this._setSetpoint) {
         this._setSetpoint(args.temperature);
       }
+    } else {
+      this._logger('error', '[BoundCluster] Invalid schneiderSetpoint command args:', args);
     }
   }
 
   // Catch-all for unknown commands
   unknownCommand(commandId, args) {
-    console.log('[BoundCluster] Unknown command received:', commandId, 'args:', JSON.stringify(args));
+    this._logger('log', '[BoundCluster] Unknown command received:', commandId, 'args:', JSON.stringify(args));
   }
 }
 
