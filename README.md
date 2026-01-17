@@ -3,6 +3,7 @@
 Homey app for the Schneider Electric CCTFR6400 Zigbee thermostat (also known as Wiser Room Thermostat).
 
 [![Homey SDK](https://img.shields.io/badge/Homey%20SDK-3-blue.svg)](https://apps.athom.com/)
+[![Version](https://img.shields.io/badge/version-0.0.2-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ## Features
@@ -127,7 +128,8 @@ The thermostat uses 2x AAA batteries. Battery life depends on usage but typicall
 
 | Cluster | ID | Usage |
 |---------|-----|-------|
-| Thermostat | 0x0201 (513) | Setpoint binding |
+| Basic | 0x0000 (0) | Hub connectivity verification |
+| Thermostat | 0x0201 (513) | Setpoint binding, mode control |
 | Temperature Measurement | 0x0402 (1026) | Temperature reading |
 | Relative Humidity | 0x0405 (1029) | Humidity reading |
 | Power Configuration | 0x0001 (1) | Battery level |
