@@ -39,7 +39,7 @@ The thermostat sends UI events via the proprietary **wiserDeviceInfo** cluster (
 ## Installation
 
 ### Prerequisites
-- Homey with firmware >= 12.0.0
+- Homey with firmware >= 12.2.0
 - Zigbee dongle (built-in or USB)
 - Schneider CCTFR6400 thermostat
 

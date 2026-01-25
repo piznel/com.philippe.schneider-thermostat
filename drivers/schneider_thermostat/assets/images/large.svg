@@ -1,6 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <!-- LARGE IMAGE - Driver large.png replacement -->
-  <rect x="0" y="0" width="256" height="256" fill="#9b59b6"/>
-  <text x="128" y="130" font-family="Arial" font-size="72" font-weight="bold" fill="#ffffff" text-anchor="middle">LARGE</text>
-  <text x="128" y="200" font-family="Arial" font-size="32" fill="#ffffff" text-anchor="middle">256x256</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Boîtier principal -->
+  <rect x="64" y="64" width="384" height="384" rx="40" fill="#FFFFFF" stroke="#E0E0E0" stroke-width="2"/>
+  <!-- Écran circulaire -->
+  <circle cx="256" cy="220" r="100" fill="#1A1A1A"/>
+  <!-- Affichage température -->
+  <text x="256" y="245" font-family="Arial, sans-serif" font-size="65" font-weight="bold" fill="#FFFFFF" text-anchor="middle">21.5°</text>
+  <!-- Bouton Moins -->
+  <circle cx="176" cy="360" r="35" fill="#3DCD58"/>
+  <rect x="156" y="357" width="40" height="6" rx="3" fill="white"/>
+  <!-- Bouton Plus -->
+  <circle cx="336" cy="360" r="35" fill="#3DCD58"/>
+  <rect x="316" y="357" width="40" height="6" rx="3" fill="white"/>
+  <rect x="333" y="340" width="6" height="40" rx="3" fill="white"/>
+  <!-- Logo Wiser discret -->
+  <text x="256" y="100" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#3DCD58" text-anchor="middle" letter-spacing="2">WISER</text>
 </svg>

@@ -134,7 +134,7 @@ Si vous avez déjà une version installée et que vous voulez la remplacer :
 - Vérifiez les logs pour des erreurs
 
 ### L'installation échoue
-- Vérifiez que vous avez la bonne version de Homey (>= 12.0.0)
+- Vérifiez que vous avez la bonne version de Homey (>= 12.2.0)
 - Vérifiez les logs Homey : Settings → System → Logs
 - Assurez-vous que l'app n'est pas déjà installée (désinstallez-la d'abord)
 

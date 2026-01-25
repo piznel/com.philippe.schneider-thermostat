@@ -5,12 +5,19 @@
     "fr": "Thermostat Schneider (CCTFR6400)"
   },
   "class": "thermostat",
-  "capabilities": [
-    "measure_temperature",
-    "measure_humidity",
-    "measure_battery",
-    "target_temperature",
-    "thermostat_mode"
+    "capabilities": [
+      "measure_temperature",
+      "measure_humidity",
+      "measure_battery",
+      "target_temperature",
+      "thermostat_mode",
+      "valve_position"
+    ],
+  "platforms": [
+    "local"
+  ],
+  "connectivity": [
+    "zigbee"
   ],
   "energy": {
     "batteries": ["AAA", "AAA"]
@@ -21,7 +28,7 @@
     "endpoints": {
       "1": {
         "clusters": [0, 1, 3, 32, 513, 516, 1026, 1029, 2821, 65027],
-        "bindings": [0, 25, 513, 65027]
+        "bindings": [0, 1, 3, 25, 32, 513, 1026, 1029, 65027]
       }
     }
   },
@@ -55,12 +62,18 @@
       "template": "add_devices"
     }
   ],
-  "icon": "/drivers/schneider_thermostat/assets/icon.svg",
   "images": {
-    "small": "/drivers/schneider_thermostat/assets/images/small.png",
-    "large": "/drivers/schneider_thermostat/assets/images/large.png"
+    "small": "assets/images/driver-small.png",
+    "large": "assets/images/driver-large.png"
   },
+  "icon": "assets/icon.svg",
   "capabilitiesOptions": {
+    "valve_position": {
+      "title": {
+        "en": "Valve Opening",
+        "fr": "Ouverture Vanne"
+      }
+    },
     "thermostat_mode": {
       "values": [
         {

@@ -45,7 +45,7 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
   }
 
   async onNodeInit({ zclNode }) {
-    this.log('Init', this.getData());
+    this.debug('Init', this.getData());
 
     const ep = zclNode.endpoints?.[1];
     if (!ep) {
@@ -89,7 +89,7 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
       }
     }
 
-    this.log('Available clusters:', Object.keys(ep.clusters || {}));
+    this.debug('Available clusters:', Object.keys(ep.clusters || {}));
 
     // Initialize heating demand (0-100%, controls flame icon on thermostat)
     this._piHeatingDemand = 0;
@@ -121,12 +121,12 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
           if (level === 'error') {
             this.error(...args);
           } else {
-            this.log(...args);
+            this.debug(...args);
           }
         },
       });
       ep.bind('thermostat', boundCluster);
-      this.log('✅ Bound thermostat cluster as server');
+      this.debug('✅ Bound thermostat cluster as server');
     } catch (err) {
       this.error('Failed to bind thermostat cluster:', err);
       // Continue initialization even if binding fails - device might still work
@@ -140,16 +140,35 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
           if (level === 'error') {
             this.error(...args);
           } else {
-            this.log(...args);
+            this.debug(...args);
           }
         },
       });
       ep.bind('basic', basicBoundCluster);
-      this.log('✅ Bound Basic cluster as server');
-      this.log('   The thermostat can now verify hub connectivity via Basic cluster');
+      this.debug('✅ Bound Basic cluster as server');
+      this.debug('   The thermostat can now verify hub connectivity via Basic cluster');
     } catch (err) {
       this.error('Failed to bind Basic cluster:', err);
       // Continue initialization even if binding fails
+    }
+
+    // ---- Poll Control (0x0020) ----
+    // Essential for battery-operated devices to stay connected
+    const pollControlCluster = ep.clusters.pollControl;
+    if (pollControlCluster) {
+      this.debug('✅ Setting up Poll Control listener');
+      pollControlCluster.on('checkIn', () => {
+        this.debug('Poll Control: Check-in received from thermostat');
+        // Tell the device it can go back to sleep immediately (no pending messages)
+        pollControlCluster.checkInResponse({ startFastPolling: false, fastPollTimeout: 0 })
+          .catch(err => this.error('Failed to send checkInResponse:', err));
+      });
+
+      // Optionally configure the check-in interval (e.g., every 1 hour)
+      // Some Schneider devices ignore this, but it's good practice
+      pollControlCluster.writeAttributes({ checkInInterval: 3600 * 4 }) // 1 hour (unit is quarter-seconds)
+        .then(() => this.debug('   Poll Control check-in interval configured'))
+        .catch(err => this.debug('   Note: Could not write pollControl checkInInterval (this is common):', err.message));
     }
 
     // ---- Thermostat Mode ----
@@ -163,6 +182,14 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
         } else if (value === 'off') {
           this._piHeatingDemand = 0;
         }
+        
+        // Update valve_position to reflect the mode change
+        try {
+          if (this.hasCapability('valve_position')) await this.setCapabilityValue('valve_position', this._piHeatingDemand / 100);
+        } catch (err) {
+          this.error('Failed to update valve_position from mode:', err);
+        }
+        
         return true;
       });
       // Initialize mode to "off" by default
@@ -170,6 +197,32 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
         await this.setCapabilityValue('thermostat_mode', 'off');
       } catch (err) {
         this.error('Failed to initialize thermostat_mode capability:', err);
+      }
+    }
+
+    // ---- Valve Opening (Valve Position) ----
+    if (this.hasCapability('valve_position')) {
+      this.registerCapabilityListener('valve_position', async (value) => {
+        const pct = Math.round(value * 100);
+        this.log(`Setting valve opening (valve_position) to ${pct}%`);
+        this._piHeatingDemand = pct;
+        
+        // Update thermostat mode based on demand: > 0 means "heat"
+        if (this.hasCapability('thermostat_mode')) {
+          const mode = pct > 0 ? 'heat' : 'off';
+          if (this.getCapabilityValue('thermostat_mode') !== mode) {
+            await this.setCapabilityValue('thermostat_mode', mode).catch(this.error);
+          }
+        }
+        
+        return true;
+      });
+
+      // Initialize with current value
+      try {
+        await this.setCapabilityValue('valve_position', this._piHeatingDemand / 100);
+      } catch (err) {
+        this.error('Failed to initialize valve_position:', err);
       }
     }
 
@@ -251,8 +304,9 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
 
     const wiserCluster = ep.clusters?.wiserDeviceInfo || ep.clusters?.['65027'] || ep.clusters?.draytonDeviceInfo;
     if (wiserCluster) {
-      this.log('Setting up wiserDeviceInfo listener');
+      this.debug('✅ WiserDeviceInfo cluster found! Listeners active.');
 
+      // Listen for all attribute changes on this proprietary cluster
       wiserCluster.on('attr.deviceInfo', async (value) => {
         try {
           this.log('>>> WISER DEVICE INFO:', value);
@@ -262,26 +316,19 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
         }
       });
 
-      // Also listen for report events
+      // Also listen for report events (redundant but safe)
       wiserCluster.on('report', async (report) => {
         try {
-          this.debug('WISER REPORT:', JSON.stringify(report));
           if (report?.deviceInfo) {
+            this.debug('WISER REPORT:', report.deviceInfo);
             await this._handleDeviceInfo(report.deviceInfo);
           }
         } catch (err) {
           this.error('Error handling deviceInfo report:', err);
         }
       });
-
-      // Generic attribute listener (debug only)
-      if (DEBUG_MODE) {
-        wiserCluster.on('attr.*', (name, value) => {
-          this.debug('WISER ATTR:', name, '=', value);
-        });
-      }
     } else {
-      this.log('wiserDeviceInfo cluster not found, checking available clusters');
+      this.debug('wiserDeviceInfo cluster not found, checking available clusters');
     }
 
     // ---- Listen to ALL clusters for debugging (only when DEBUG_MODE is true) ----
@@ -307,7 +354,7 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
     // This helps detect and correct any setpoint drift between Homey and thermostat
     this._startAntiDriftPolling();
 
-    this.log('Device initialization complete');
+    this.debug('Device initialization complete');
   }
 
   /**
@@ -335,7 +382,7 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
           try {
             const result = await Promise.race([readPromise, timeoutPromise]);
             if (result?.measuredValue !== undefined) {
-              this.log(`Anti-drift poll: temperature = ${result.measuredValue / 100}°C`);
+              this.debug(`Anti-drift poll: temperature = ${result.measuredValue / 100}°C`);
               this._localTemperatureCenti = result.measuredValue;
             }
           } catch (err) {
@@ -344,13 +391,27 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
         }
 
         // Log current state for debugging
-        this.log(`Anti-drift check: Homey setpoint = ${this._targetSetpointCenti / 100}°C, heating demand = ${this._piHeatingDemand}%`);
+        this.debug(`Anti-drift check: Homey setpoint = ${this._targetSetpointCenti / 100}°C, heating demand = ${this._piHeatingDemand}%`);
+
+        // Force read wiserDeviceInfo to see if we can get ALG/Boost info
+        const wiserCluster = this._endpoint?.clusters?.wiserDeviceInfo || this._endpoint?.clusters?.['65027'];
+        if (wiserCluster) {
+          try {
+            const result = await wiserCluster.readAttributes(['deviceInfo']);
+            if (result?.deviceInfo) {
+              this.debug('Anti-drift poll: forced deviceInfo read =', result.deviceInfo);
+              await this._handleDeviceInfo(result.deviceInfo);
+            }
+          } catch (err) {
+            this.debug('Anti-drift poll: failed to read wiserDeviceInfo:', err.message);
+          }
+        }
       } catch (err) {
         this.error('Anti-drift poll error:', err);
       }
     }, POLL_INTERVAL_MS);
 
-    this.log(`Anti-drift polling started (every ${POLL_INTERVAL_MS / 60000} minutes)`);
+    this.debug(`Anti-drift polling started (every ${POLL_INTERVAL_MS / 60000} minutes)`);
   }
 
   async onUninit() {
@@ -358,7 +419,7 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
     if (this._antiDriftInterval) {
       clearInterval(this._antiDriftInterval);
       this._antiDriftInterval = null;
-      this.log('Anti-drift polling stopped (device uninitialized)');
+      this.debug('Anti-drift polling stopped (device uninitialized)');
     }
   }
 
@@ -368,7 +429,7 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
       clearInterval(this._antiDriftInterval);
       this._antiDriftInterval = null;
     }
-    this.log('Device deleted');
+    this.debug('Device deleted');
   }
 
   /**
@@ -391,13 +452,13 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
     const dataType = parts[0];
     const action = parts[1];
 
-    this.log(`Parsed deviceInfo: type=${dataType}, action=${action}`);
+    this.debug(`Parsed deviceInfo: type=${dataType}, action=${action}`);
 
     // Handle ENV data: ENV,setpoint,temperature,humidity (all in centi-units)
     if (dataType === 'ENV') {
       // Validate that we have enough parts
       if (parts.length < 4) {
-        this.log('Invalid ENV data: insufficient parts', deviceInfo);
+        this.debug('Invalid ENV data: insufficient parts', deviceInfo);
         return;
       }
 
@@ -418,16 +479,30 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
                               humidityCenti <= 10000; // 0-100% in centi-percent
 
       if (!isValidSetpoint || !isValidTemp || !isValidHumidity) {
-        this.log(`ENV data validation failed: setpoint=${setpointCenti}, temp=${tempCenti}, humidity=${humidityCenti}`);
+        this.debug(`ENV data validation failed: setpoint=${setpointCenti}, temp=${tempCenti}, humidity=${humidityCenti}`);
         return;
       }
 
-      this.log(`ENV data: setpoint=${setpointCenti/100}°C, temp=${tempCenti/100}°C, humidity=${humidityCenti/100}%`);
+      this.debug(`ENV data: setpoint=${setpointCenti/100}°C, temp=${tempCenti/100}°C, humidity=${humidityCenti/100}%`);
 
       // Sync setpoint if it differs from current value
       if (setpointCenti !== this._targetSetpointCenti) {
         this.log(`Syncing setpoint from ENV: ${this._targetSetpointCenti/100}°C -> ${setpointCenti/100}°C`);
         await this._updateSetpoint(setpointCenti);
+      }
+      return;
+    }
+
+    // Handle ALG data (Algorithm/Internal state)
+    // Format: ALG,flags,target,local,pterm,iterm,dterm,rate,demand,?,boost_time
+    if (dataType === 'ALG') {
+      this.log('>>> ALG DATA RECEIVED:', deviceInfo);
+      if (parts.length >= 12) {
+        const boostTime = parseInt(parts[11], 10);
+        if (!isNaN(boostTime) && boostTime > 0) {
+          this.log(`Boost detected via ALG! Remaining time: ${boostTime} minutes`);
+          // On pourrait ici déclencher un état "Boost" dans Homey
+        }
       }
       return;
     }
@@ -439,13 +514,13 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
     // Track screen state
     if (action === 'ScreenWake') {
       this._screenAwake = true;
-      this.log('Screen woke up');
+      this.debug('Screen woke up');
       return;
     }
 
     if (action === 'ScreenSleep') {
       this._screenAwake = false;
-      this.log('Screen went to sleep');
+      this.debug('Screen went to sleep');
       return;
     }
 
@@ -453,7 +528,7 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
     // Note: If screen was asleep, first button press only wakes screen (no temp change)
     if (action === 'ButtonPressPlusDown') {
       if (!this._screenAwake) {
-        this.log('Plus button pressed (ignored - screen was asleep, this just wakes it)');
+        this.debug('Plus button pressed (ignored - screen was asleep, this just wakes it)');
         this._screenAwake = true;
         return;
       }
@@ -465,7 +540,7 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
 
     if (action === 'ButtonPressMinusDown') {
       if (!this._screenAwake) {
-        this.log('Minus button pressed (ignored - screen was asleep, this just wakes it)');
+        this.debug('Minus button pressed (ignored - screen was asleep, this just wakes it)');
         this._screenAwake = true;
         return;
       }

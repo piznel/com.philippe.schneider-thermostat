@@ -1,6 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- DRIVER ICON - Should appear when pairing -->
-  <rect x="0" y="0" width="64" height="64" fill="#ff6b35"/>
-  <text x="32" y="38" font-family="Arial" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle">DRIVER</text>
-  <text x="32" y="55" font-family="Arial" font-size="10" fill="#ffffff" text-anchor="middle">icon.svg</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#3DCD58"/>
+  <rect x="100" y="100" width="312" height="312" rx="30" fill="white"/>
+  <circle cx="256" cy="256" r="85" fill="#1A1A1A"/>
 </svg>
