@@ -485,10 +485,15 @@ class SchneiderThermostatDevice extends ZigBeeDevice {
 
       this.debug(`ENV data: setpoint=${setpointCenti/100}°C, temp=${tempCenti/100}°C, humidity=${humidityCenti/100}%`);
 
-      // Sync setpoint if it differs from current value
+      // Log setpoint difference but DO NOT sync from ENV to Homey
+      // Homey is the source of truth for the setpoint - the thermostat should read
+      // the setpoint from the BoundCluster (occupiedHeatingSetpoint), not the other way around.
+      // ENV data shows what the thermostat currently believes, which may be temporarily
+      // out of sync until the thermostat polls the BoundCluster for the new value.
+      // Syncing from ENV would cause the bug: user sets 22°C in Homey, but the thermostat
+      // sends ENV with old value (20°C), and Homey would revert to 20°C.
       if (setpointCenti !== this._targetSetpointCenti) {
-        this.log(`Syncing setpoint from ENV: ${this._targetSetpointCenti/100}°C -> ${setpointCenti/100}°C`);
-        await this._updateSetpoint(setpointCenti);
+        this.debug(`ENV setpoint (${setpointCenti/100}°C) differs from Homey setpoint (${this._targetSetpointCenti/100}°C) - thermostat will sync on next poll`);
       }
       return;
     }
