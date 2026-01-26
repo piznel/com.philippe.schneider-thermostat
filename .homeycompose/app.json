@@ -1,6 +1,6 @@
 {
   "id": "com.philippe.schneider-thermostat",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "sdk": 3,
   "compatibility": ">=12.2.0",
   "author": {
